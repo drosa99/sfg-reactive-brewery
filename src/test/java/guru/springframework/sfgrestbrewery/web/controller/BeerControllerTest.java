@@ -1,91 +1,85 @@
 package guru.springframework.sfgrestbrewery.web.controller;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import guru.springframework.sfgrestbrewery.bootstrap.BeerLoader;
 import guru.springframework.sfgrestbrewery.services.BeerService;
 import guru.springframework.sfgrestbrewery.web.model.BeerDto;
+import guru.springframework.sfgrestbrewery.web.model.BeerPagedList;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import reactor.core.publisher.Mono;
 
-import java.util.UUID;
+import java.util.List;
 
-import static org.hamcrest.core.Is.is;
+import static org.hamcrest.Matchers.equalTo;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.then;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(BeerController.class)
-public class BeerControllerTest {
+@WebFluxTest(BeerController.class)
+class BeerControllerTest {
 
-    @MockBean
-    BeerService beerService;
+		@Autowired
+		WebTestClient webTestClient;
 
-    @Autowired
-    MockMvc mockMvc;
+		@MockBean
+		BeerService beerService;
 
-    @Autowired
-    ObjectMapper objectMapper;
+		BeerDto validBeer;
 
-    BeerDto validBeer;
+		@BeforeEach
+		void setUp() {
+				validBeer = BeerDto.builder()
+						.beerName("Test beer")
+						.beerStyle("PALE_ALE")
+						.upc(BeerLoader.BEER_1_UPC)
+						.build();
+		}
 
-    @BeforeEach
-    public void setUp() {
-        validBeer = BeerDto.builder().id(UUID.randomUUID())
-                .beerName("Beer1")
-                .beerStyle("PALE_ALE")
-                .upc(BeerLoader.BEER_2_UPC)
-                .build();
-    }
+		@Test
+		void getBeerById() {
+				Integer beerId = 1;
+				given(beerService.getById(any(), any())).willReturn(Mono.just(validBeer));
 
-    @Test
-    public void getBeer() throws Exception {
-        given(beerService.getById(any(UUID.class), any())).willReturn(validBeer);
+				webTestClient.get()
+						.uri("/api/v1/beer/" + beerId)
+						.accept(MediaType.APPLICATION_JSON)
+						.exchange()
+						.expectStatus().isOk()
+						.expectBody(BeerDto.class)
 
-        mockMvc.perform(get("/api/v1/beer/" + validBeer.getId().toString()).accept(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.id", is(validBeer.getId().toString())))
-                .andExpect(jsonPath("$.beerName", is("Beer1")));
-    }
+						.value(beerDto -> beerDto.getBeerName(), equalTo(validBeer.getBeerName()));
+		}
 
-    @Test
-    public void handlePost() throws Exception {
-        //given
-        BeerDto beerDto = validBeer;
-        beerDto.setId(null);
-        BeerDto savedDto = BeerDto.builder().id(UUID.randomUUID()).beerName("New Beer").build();
-        String beerDtoJson = objectMapper.writeValueAsString(beerDto);
+		@Test
+		void listBeers() {
+				BeerPagedList beerPagedList = new BeerPagedList(List.of(validBeer));
+				given(beerService.listBeers(any(), any(), any(), any())).willReturn(Mono.just(beerPagedList));
 
-        given(beerService.saveNewBeer(any())).willReturn(savedDto);
+				webTestClient.get()
+						.uri("/api/v1/beer")
+						.accept(MediaType.APPLICATION_JSON)
+						.exchange()
+						.expectStatus().isOk()
+						.expectBody(BeerDto.class)
+						.value(beerDto -> beerPagedList.getContent().get(0).getBeerName(), equalTo(validBeer.getBeerName()));
+		}
 
-        mockMvc.perform(post("/api/v1/beer/")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(beerDtoJson))
-                .andExpect(status().isCreated());
+		@Test
+		void getBeerByUpc() {
+				given(beerService.getByUpc(any())).willReturn(Mono.just(validBeer));
 
-    }
+				webTestClient.get()
+						.uri("/api/v1/beerUpc/" + "123123123")
+						.accept(MediaType.APPLICATION_JSON)
+						.exchange()
+						.expectStatus().isOk()
+						.expectBody(BeerDto.class)
 
-    @Test
-    public void handleUpdate() throws Exception {
-        //given
-        BeerDto beerDto = validBeer;
-        beerDto.setId(null);
-        String beerDtoJson = objectMapper.writeValueAsString(beerDto);
+						.value(beerDto -> beerDto.getBeerName(), equalTo(validBeer.getBeerName()));
 
-        //when
-        mockMvc.perform(put("/api/v1/beer/" + UUID.randomUUID())
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(beerDtoJson))
-                .andExpect(status().isNoContent());
-
-        then(beerService).should().updateBeer(any(), any());
-
-    }
+		}
 }

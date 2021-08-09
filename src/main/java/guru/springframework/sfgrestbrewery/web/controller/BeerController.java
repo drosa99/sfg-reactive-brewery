@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
 
-import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -53,14 +53,25 @@ public class BeerController {
         return ResponseEntity.ok(beerList);
     }
 
+    @ExceptionHandler
+    ResponseEntity<Void> handleNotFound(NotFoundException ex) {
+        return ResponseEntity.notFound().build();
+    }
+
     @GetMapping("beer/{beerId}")
     public ResponseEntity<Mono<BeerDto>> getBeerById(@PathVariable("beerId") Integer beerId,
-                                                    @RequestParam(value = "showInventoryOnHand", required = false) Boolean showInventoryOnHand){
+                                                     @RequestParam(value = "showInventoryOnHand", required = false) Boolean showInventoryOnHand) {
         if (showInventoryOnHand == null) {
             showInventoryOnHand = false;
         }
 
-        return ResponseEntity.ok(beerService.getById(beerId, showInventoryOnHand));
+        return ResponseEntity.ok(beerService.getById(beerId, showInventoryOnHand)
+            .defaultIfEmpty(BeerDto.builder().build())
+            .doOnNext(beerDto -> {
+                if (beerDto.getId() == null) {
+                    throw new NotFoundException();
+                }
+            }));
     }
 
     @GetMapping("beerUpc/{upc}")
@@ -84,8 +95,21 @@ public class BeerController {
     }
 
     @PutMapping("beer/{beerId}")
-    public ResponseEntity<Void> updateBeerById(@PathVariable("beerId") UUID beerId, @RequestBody @Validated BeerDto beerDto){
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<Void> updateBeerById(@PathVariable("beerId") Integer beerId, @RequestBody @Validated BeerDto beerDto) {
+        AtomicBoolean atomicBoolean = new AtomicBoolean(false);
+
+        //colocar o subscribe eh o back pressure para acontecer a acao
+        beerService.updateBeer(beerId, beerDto).subscribe(savedDto -> {
+            if (savedDto.getId() != null) {
+                atomicBoolean.set(true);
+            }
+        });
+
+        if (atomicBoolean.get()) {
+            return ResponseEntity.noContent().build();
+        } else {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @DeleteMapping("beer/{beerId}")
