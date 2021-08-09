@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.Null;
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
@@ -21,7 +21,7 @@ import java.util.UUID;
 public class BeerDto {
 
     @Null
-    private UUID id;
+    private Integer id;
 
     @NotBlank
     private String beerName;
@@ -35,6 +35,6 @@ public class BeerDto {
 
     private Integer quantityOnHand;
 
-    private OffsetDateTime createdDate;
-    private OffsetDateTime lastUpdatedDate;
+    private LocalDateTime createdDate;
+    private LocalDateTime lastUpdatedDate;
 }
